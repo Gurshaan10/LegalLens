@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "@mantine/carousel": "^8.0.2",
+    "firebase": "^11.8.1",
+    "framer-motion": "^12.16.0"
+  }
+}
