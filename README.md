@@ -5,17 +5,17 @@ A full-stack legal document analysis web application powered by AI. Upload legal
 ## 🏗️ Architecture
 
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   React Frontend│    │  FastAPI Backend│    │   PostgreSQL    │
-│   (Mantine UI)  │◄──►│   (Python)      │◄──►│   Database      │
-│                 │    │                 │    │                 │
-│ • Google OAuth  │    │ • Document      │    │ • User Profiles │
-│ • Document Upload│    │   Processing    │    │ • Document      │
-│ • Chat Interface │    │ • OCR (Tesseract)│   │   Metadata      │
-│ • History View  │    │ • OpenAI GPT-4  │    │ • Query History │
-│ • Credit System │    │ • Vector Search │    │ • Credit System │
-└─────────────────┘    │ • Firebase Auth │    └─────────────────┘
-                       └─────────────────┘
+┌───────────────── ┐    ┌───────────────── ┐    ┌─────────────────┐
+│   React Frontend │    │  FastAPI Backend │    │   PostgreSQL    │
+│   (Mantine UI)   │◄──►│   (Python)       │◄──►│   Database      │
+│                  │    │                  │    │                 │
+│ • Google OAuth   │    │ • Document       │    │ • User Profiles │
+│ • Document Upload│    │   Processing     │    │ • Document      │
+│ • Chat Interface │    │ • OCR (Tesseract)│    │   Metadata      │
+│ • History View   │    │ • OpenAI GPT-4   │    │ • Query History │
+│ • Credit System  │    │ • Vector Search  │    │ • Credit System │
+└───────────────── ┘    │ • Firebase Auth  │    └─────────────────┘
+                        └───────────────── ┘
                                 │
                                 ▼
                        ┌─────────────────┐
@@ -397,17 +397,9 @@ Legal_Lens/
 - Verify user has sufficient credits
 
 **AI responses are generic:**
-- Check OpenAI API key and quota
 - Verify document was processed correctly
 - Check vector store was created properly
 
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🤝 Support
-
-For support, please open an issue on GitHub or contact the development team.
 
 ---
 
