@@ -1,66 +1,116 @@
 # Legal Lens 🔍
 
-A full-stack legal document analysis web application powered by AI. Upload legal documents and get instant, intelligent analysis using advanced NLP and vector search capabilities.
+A production-ready full-stack legal document analysis application powered by AI. Upload legal documents and get instant, intelligent analysis using RAG (Retrieval-Augmented Generation), vector search, and GPT-4.
+
+**🚀 Live Demo:** [Coming Soon - Deploying to Railway]
 
 **Try it instantly** - No sign-up required! Query our demo document or upload your own (2 free uploads per day for guests).
+
+---
 
 ## 👋 For Portfolio Reviewers & Hiring Managers
 
 Want to see Legal Lens in action without setting up accounts? Here's how:
 
-### Instant Demo (30 seconds)
+### ⚡ Instant Demo (30 seconds)
 1. **Start the app** (see Quick Start below)
-2. **Query the demo document** at `http://localhost:8000/demo` - it's pre-loaded!
-3. **Try asking**: "What is the monthly rent?" or "What are the tenant's responsibilities?"
+2. **Visit** `http://localhost:5173`
+3. **Click** on the demo Robinhood document - it's pre-loaded!
+4. **Try asking**:
+   - "What is the FDIC insurance limit?"
+   - "How does the Cash Sweep Program work?"
+   - "What is the Brokerage-Held Cash Program threshold?"
 
-### Test with Your Own Document (1 minute)
-- Upload any legal PDF (up to 5MB) - **no sign-up needed**
-- Get 2 free uploads per day to fully test the AI capabilities
-- Experience the OCR, vector search, and GPT-4 analysis
+### 📄 Test with Your Own Document (1 minute)
+- Upload any legal PDF (up to 50MB) - **no sign-up needed**
+- Get **2 free uploads per day** to fully test the AI capabilities
+- Experience OCR (for scanned PDFs), vector search, and GPT-4 analysis
+- Ask unlimited questions about your uploaded document
 
-### Full Feature Access (Optional)
+### 🔐 Full Feature Access (Optional)
 - Sign in with Google to get **5 credits** and persistent history
-- Perfect for evaluating the complete authentication and credit system
+- Access your upload history and previous queries
+- Account menu with credit tracking and sign-out
 
 **Bottom line:** You can evaluate all core features in under 2 minutes without creating any accounts! 🚀
 
+---
+
 ## 🏗️ Architecture
 
+### Tech Stack
+
+**Frontend:**
+- React 18 + TypeScript + Vite
+- Mantine UI (custom bronze/dark theme)
+- Firebase Authentication (Google OAuth)
+- React Router for navigation
+
+**Backend:**
+- FastAPI (Python 3.10+)
+- PostgreSQL with SQLAlchemy ORM
+- OpenAI GPT-4 for analysis
+- FAISS for vector similarity search
+- LangChain for RAG pipeline
+- Tesseract OCR for scanned PDFs
+- Firebase Admin SDK for auth
+
+**Infrastructure:**
+- Railway (PostgreSQL + Backend deployment)
+- Vercel (Frontend hosting)
+- Docker & Docker Compose for local dev
+
+### System Architecture
+
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   React Frontend│    │  FastAPI Backend│    │   PostgreSQL    │
-│   (Mantine UI)  │◄──►│   (Python)      │◄──►│   Database      │
-│                 │    │                 │    │                 │
-│ • Google OAuth  │    │ • Document      │    │ • User Profiles │
-│ • Document Upload│    │   Processing    │    │ • Document      │
-│ • Chat Interface │    │ • OCR (Tesseract)│   │   Metadata      │
-│ • History View  │    │ • OpenAI GPT-4  │    │ • Query History │
-│ • Credit System │    │ • Vector Search │    │ • Credit System │
-└─────────────────┘    │ • Firebase Auth │    └─────────────────┘
-                       └─────────────────┘
-                                │
-                                ▼
-                       ┌─────────────────┐
-                       │   Vector Store  │
-                       │   (FAISS)       │
-                       │                 │
-                       │ • Document      │
-                       │   Embeddings    │
-                       │ • Semantic      │
-                       │   Search        │
-                       └─────────────────┘
+┌─────────────────────┐    ┌──────────────────────┐    ┌─────────────────┐
+│   React Frontend    │    │   FastAPI Backend    │    │   PostgreSQL    │
+│   (Mantine UI)      │◄──►│   (Python)           │◄──►│   Database      │
+│                     │    │                      │    │                 │
+│ • Google OAuth      │    │ • Document Processing│    │ • User Profiles │
+│ • Document Upload   │    │ • OCR (Tesseract)    │    │ • Documents     │
+│ • Chat Interface    │    │ • Text Chunking      │    │ • Query History │
+│ • History View      │    │ • OpenAI Embeddings  │    │ • Credits       │
+│ • Credit Tracking   │    │ • GPT-4 Analysis     │    │ • Guest Uploads │
+│ • Account Menu      │    │ • Firebase Auth      │    └─────────────────┘
+└─────────────────────┘    │ • Rate Limiting      │
+                           └──────────────────────┘
+                                      │
+                                      ▼
+                           ┌──────────────────────┐
+                           │   FAISS Vector Store │
+                           │   (In-Memory)        │
+                           │                      │
+                           │ • Document Embeddings│
+                           │ • Semantic Search    │
+                           │ • Top-k Retrieval    │
+                           └──────────────────────┘
 ```
+
+### RAG Pipeline
+
+```
+PDF Upload → Text Extraction → Chunking (1000 chars, 200 overlap)
+    → OpenAI Embeddings → FAISS Index
+
+User Query → Query Embedding → FAISS Similarity Search (top-3)
+    → Context Retrieval → GPT-4 Prompt → Structured Response
+```
+
+---
 
 ## 💳 Credit System
 
 Legal Lens uses a flexible credit system to manage usage:
 
-| User Type | Credits | Limits | Features |
-|-----------|---------|--------|----------|
-| **Guest** | N/A | 2 uploads/day (per IP) | • Query demo document (unlimited)<br>• Upload own documents (2/day)<br>• No persistent history |
-| **Registered** | 5 initial credits | 1 credit per upload | • 5 free uploads on sign-up<br>• Persistent history<br>• Full account features |
+| User Type | Credits | Upload Limit | Features |
+|-----------|---------|--------------|----------|
+| **Guest** | N/A | 2/day per IP | • Query demo document (unlimited)<br>• Upload own documents (2/day)<br>• No persistent history<br>• localStorage tracking |
+| **Registered** | 5 initial | 1 credit per upload | • 5 free uploads on sign-up<br>• Persistent history<br>• Query history<br>• Account menu |
 
-**Note:** Querying documents (both demo and uploaded) is always free and unlimited for all users!
+**Note:** Querying documents (both demo and uploaded) is **always free and unlimited** for all users!
+
+---
 
 ## 🚀 Quick Start
 
@@ -68,22 +118,26 @@ Legal Lens uses a flexible credit system to manage usage:
 
 - Python 3.10+
 - Node.js 18+
-- Docker (optional)
-- Firebase Project (for authentication features)
+- Docker (optional, but recommended)
+- Firebase Project (for authentication)
 - OpenAI API Key
 
 ### Option 1: Docker (Recommended)
 
 ```bash
 # Clone the repository
-git clone <repository-url>
-cd Legal_Lens
+git clone https://github.com/YOUR_USERNAME/legal-lens.git
+cd legal-lens
+
+# Set up environment variables
+cp env.example .env
+# Edit .env with your API keys
 
 # Start the entire application
 docker-compose up -d
 
 # Access the application
-open http://localhost:3000
+open http://localhost:5173
 ```
 
 ### Option 2: Manual Setup
@@ -101,15 +155,19 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 # Set up environment variables
-cp .env.example .env
-# Edit .env with your API keys
+# Create .env in backend/ with:
+# OPENAI_API_KEY=your_key_here
+# DATABASE_URL=sqlite:///./legal_lens.db
+# FIREBASE_ADMIN_CREDENTIAL=firebase-admin.json
 
-# Run database migrations
-alembic upgrade head
+# Initialize database
+python -c "from database import create_tables; create_tables()"
 
 # Start the backend server
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+Backend will be available at: `http://localhost:8000`
 
 #### Frontend Setup
 
@@ -120,257 +178,141 @@ cd frontend
 npm install
 
 # Set up environment variables
-cp .env.example .env
-# Edit .env with your Firebase config
+# Create .env.local in frontend/ with:
+# VITE_FIREBASE_API_KEY=your_key
+# VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+# VITE_FIREBASE_PROJECT_ID=your_project_id
+# VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+# VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+# VITE_FIREBASE_APP_ID=your_app_id
+# VITE_API_BASE_URL=http://localhost:8000
 
 # Start the development server
-npm start
+npm run dev
 ```
+
+Frontend will be available at: `http://localhost:5173`
+
+---
+
+## 📁 Project Structure
+
+```
+legal-lens/
+├── backend/                    # FastAPI backend application
+│   ├── main.py                # API routes, RAG pipeline, auth
+│   ├── models.py              # SQLAlchemy models (User, Document, Query, GuestUpload)
+│   ├── database.py            # Database config and session management
+│   ├── db_services.py         # Database CRUD operations
+│   ├── utils.py               # Helper utilities
+│   ├── ingest.py              # Batch document ingestion script
+│   ├── query.py               # CLI query tool
+│   ├── tests/                 # Comprehensive test suite
+│   │   ├── test_auth.py       # Authentication tests
+│   │   ├── test_credits.py    # Credit system tests
+│   │   └── test_qa_endpoint.py# QA pipeline tests
+│   ├── requirements.txt       # Python dependencies
+│   └── firebase-admin.json    # Firebase credentials (gitignored)
+│
+├── frontend/                   # React frontend application
+│   ├── src/
+│   │   ├── components/        # React components
+│   │   │   ├── Layout.tsx         # App layout with account menu
+│   │   │   ├── DocumentUpload.tsx # Upload with guest mode
+│   │   │   ├── ChatInterface.tsx  # Q&A interface
+│   │   │   └── DemoDocumentCard.tsx # Demo card
+│   │   ├── pages/             # Page components
+│   │   │   ├── LandingPage.tsx    # Landing with demo
+│   │   │   ├── AnalysisPage.tsx   # Main analysis page
+│   │   │   └── HistoryPage.tsx    # Upload history
+│   │   ├── contexts/          # React contexts
+│   │   │   └── AuthContext.tsx    # Firebase auth state
+│   │   ├── config/            # Configuration
+│   │   │   └── api.ts             # API endpoints config
+│   │   ├── types/             # TypeScript types
+│   │   │   └── api.ts             # API response types
+│   │   ├── firebase.ts        # Firebase client config
+│   │   └── App.tsx            # Main app component
+│   ├── package.json           # Node.js dependencies
+│   └── vite.config.ts         # Vite configuration
+│
+├── docs/                       # Documentation
+│   ├── DEPLOYMENT.md          # General deployment guide
+│   ├── QUICK_DEPLOY.md        # Quick deployment options
+│   └── RAILWAY_DEPLOY.md      # Railway-specific deployment
+│
+├── scripts/                    # Utility scripts
+│   ├── deploy.sh              # Interactive deployment script
+│   ├── deploy-simple.sh       # Simple deployment script
+│   └── run_tests.py           # Test runner
+│
+├── test-documents/             # PDF test files
+│   ├── robinhood.pdf          # Demo document (Robinhood Cash Sweep)
+│   ├── lease.pdf              # Sample lease agreement
+│   └── 25-47-25.pdf           # Test legal document
+│
+├── docker-compose.yml          # Docker orchestration
+├── Dockerfile                  # Backend Docker image
+├── railway.toml                # Railway deployment config
+├── env.example                 # Environment variables template
+├── .gitignore                  # Git ignore rules
+└── README.md                   # This file
+```
+
+---
 
 ## 🔧 Configuration
 
 ### Environment Variables
 
-#### Backend (.env)
+See `env.example` for a complete template. Key variables:
+
+#### Backend
+
 ```bash
 # OpenAI Configuration
-OPENAI_API_KEY=your_openai_api_key
+OPENAI_API_KEY=sk-your-key-here
 
-# Firebase Configuration
-FIREBASE_ADMIN_CREDENTIAL=path_to_firebase_admin.json
+# Firebase Admin SDK (path to JSON file or inline JSON)
+FIREBASE_ADMIN_CREDENTIAL=firebase-admin.json
 
-# Database Configuration
+# Database (SQLite for dev, PostgreSQL for production)
 DATABASE_URL=sqlite:///./legal_lens.db
+# For production: DATABASE_URL=postgresql://user:pass@host:5432/dbname
 
-# Server Configuration
+# Server
 HOST=0.0.0.0
 PORT=8000
 ```
 
-#### Frontend (.env)
+#### Frontend
+
 ```bash
-# Firebase Configuration
-REACT_APP_FIREBASE_API_KEY=your_firebase_api_key
-REACT_APP_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-REACT_APP_FIREBASE_PROJECT_ID=your_project_id
-REACT_APP_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
-REACT_APP_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-REACT_APP_FIREBASE_APP_ID=your_app_id
+# Firebase Client Configuration
+VITE_FIREBASE_API_KEY=AIza...
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
+VITE_FIREBASE_APP_ID=1:123:web:abc123
 
-# Backend API
-REACT_APP_API_URL=http://localhost:8000
+# Backend API URL
+VITE_API_BASE_URL=http://localhost:8000
 ```
 
-## 📚 API Documentation
-
-### Public Endpoints (No Auth Required)
-
-#### GET /demo
-Get demo document information.
-
-**Response:**
-```json
-{
-  "document_id": "demo-lease-document",
-  "filename": "Sample Lease Agreement (Demo)",
-  "available": true,
-  "chunks": 109,
-  "is_demo": true
-}
-```
-
-#### POST /query/demo-lease-document
-Query the demo document (unlimited, no auth needed).
-
-**Body:**
-```json
-{
-  "query": "What is the monthly rent amount?"
-}
-```
-
-**Response:**
-```json
-{
-  "answer": "The monthly rent amount is $3,300.00..."
-}
-```
-
-#### POST /upload/ (Guest Mode)
-Upload up to 2 documents per day without authentication.
-
-**Headers:**
-```
-Content-Type: multipart/form-data
-```
-
-**Body:**
-```
-file: <pdf_file>
-```
-
-**Response:**
-```json
-{
-  "document_id": "uuid-string",
-  "is_guest": true,
-  "credits_remaining": null
-}
-```
-
-**Rate Limiting:** 2 uploads per IP per day. Returns 429 error when exceeded:
-```json
-{
-  "detail": "Daily upload limit reached for guest users. Please sign in to get more credits."
-}
-```
-
-### Authentication Endpoints
-
-#### GET /me
-Get current user profile and credits.
-
-**Headers:**
-```
-Authorization: Bearer <firebase_id_token>
-```
-
-**Response:**
-```json
-{
-  "id": "user-uuid",
-  "email": "user@example.com",
-  "firebase_uid": "firebase-uid",
-  "credits": 5,
-  "created_at": "2024-01-15T10:30:00Z",
-  "last_login": "2024-01-15T10:30:00Z"
-}
-```
-
-### Document Management
-
-#### POST /upload/ (Authenticated)
-Upload a legal document for analysis. Requires authentication and deducts 1 credit.
-
-**Headers:**
-```
-Authorization: Bearer <firebase_id_token>
-Content-Type: multipart/form-data
-```
-
-**Body:**
-```
-file: <pdf_file>
-```
-
-**Response:**
-```json
-{
-  "document_id": "uuid-string",
-  "is_guest": false,
-  "credits_remaining": 4
-}
-```
-
-### Query Endpoints
-
-#### POST /query/{document_id}
-Query a specific document (works with or without authentication).
-
-**Headers (Optional):**
-```
-Authorization: Bearer <firebase_id_token>
-Content-Type: application/json
-```
-
-**Body:**
-```json
-{
-  "query": "What are the key terms in this contract?"
-}
-```
-
-**Response:**
-```json
-{
-  "answer": "This contract contains the following key terms..."
-}
-```
-
-### History Endpoints
-
-#### GET /history/
-Get user's document upload history.
-
-**Headers:**
-```
-Authorization: Bearer <firebase_id_token>
-```
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "filename": "contract.pdf",
-    "document_id": "doc-uuid",
-    "uploaded_at": "2024-01-15T10:30:00Z",
-    "title": "Employment Contract"
-  }
-]
-```
-
-#### GET /history/{document_id}/queries
-Get query history for a specific document.
-
-**Headers:**
-```
-Authorization: Bearer <firebase_id_token>
-```
-
-**Response:**
-```json
-[
-  {
-    "id": 1,
-    "query": "What are the key terms?",
-    "response": "The key terms include...",
-    "created_at": "2024-01-15T10:35:00Z"
-  }
-]
-```
+---
 
 ## 🧪 Testing
 
-### Quick Test (No Setup Required)
-
-Test the guest features immediately without authentication:
-
-```bash
-# Check if demo document is available
-curl http://localhost:8000/demo
-
-# Query the demo document (no auth needed)
-curl -X POST http://localhost:8000/query/demo-lease-document \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is the monthly rent amount?"}'
-
-# Test guest upload (2 per day per IP)
-curl -X POST http://localhost:8000/upload/ \
-  -F "file=@your-document.pdf"
-
-# Test rate limiting (3rd upload should fail)
-curl -X POST http://localhost:8000/upload/ \
-  -F "file=@your-document.pdf"
-```
-
 ### Run All Tests
+
 ```bash
 cd backend
 pytest
 ```
 
-### Run Specific Test Categories
+### Run Specific Test Suites
+
 ```bash
 # Authentication tests
 pytest tests/test_auth.py -v
@@ -385,158 +327,212 @@ pytest tests/test_qa_endpoint.py -v
 pytest --cov=. --cov-report=html
 ```
 
-### Test Categories
+### Quick Manual Test (No Setup Required)
 
-- **Authentication Tests**: Firebase token verification, user creation, optional auth
-- **Credit Tests**: Credit deduction, validation, edge cases
-- **Guest Access Tests**: IP-based rate limiting, demo document access
-- **QA Tests**: Document querying, AI responses, error handling
-- **Integration Tests**: End-to-end workflows
+Test the guest features immediately:
 
-## 📊 Sample Queries
+```bash
+# Check if demo document is available
+curl http://localhost:8000/demo
 
-### Contract Analysis
-```
-"What are the key obligations in this contract?"
-"Who are the parties involved?"
-"What are the termination conditions?"
-"Are there any unusual clauses I should be aware of?"
-```
+# Query the demo document (no auth needed)
+curl -X POST http://localhost:8000/query/demo-robinhood-document \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the FDIC insurance limit?"}'
 
-### Lease Agreement
-```
-"What are the rent payment terms?"
-"What are the tenant's responsibilities?"
-"Are there any maintenance obligations?"
-"What happens if I break the lease early?"
+# Test guest upload (2 per day per IP)
+curl -X POST http://localhost:8000/upload/ \
+  -F "file=@test-documents/lease.pdf"
 ```
 
-### Legal Notice
-```
-"What is this notice about?"
-"What actions are required?"
-"What are the deadlines mentioned?"
-"Who should I contact for more information?"
-```
-
-### Terms of Service
-```
-"What are the main terms of service?"
-"What are my rights as a user?"
-"What are the company's obligations?"
-"Are there any privacy implications?"
-```
+---
 
 ## 🔒 Security Features
 
-- **Firebase Authentication**: Secure Google OAuth integration for registered users
-- **Token Verification**: Server-side Firebase ID token validation
-- **IP-Based Rate Limiting**: Prevents abuse from guest users (2 uploads/day per IP)
-- **User Isolation**: Registered users can only access their own documents
-- **Credit System**: Prevents abuse and controls usage for authenticated users
-- **Optional Auth**: Flexible authentication for demo and guest access
-- **Input Validation**: Comprehensive request validation
-- **Error Handling**: Secure error responses without data leakage
+- ✅ **Firebase Authentication** - Secure Google OAuth with server-side token verification
+- ✅ **Atomic Rate Limiting** - Database-level locking prevents race conditions
+- ✅ **Input Validation** - File size (50MB max), file type, query length (500 chars)
+- ✅ **IP-Based Guest Tracking** - 2 uploads/day per IP with UTC midnight reset
+- ✅ **User Isolation** - Users can only access their own documents
+- ✅ **Credit System** - Usage tracking prevents abuse
+- ✅ **Optional Auth** - Flexible authentication for demo access
+- ✅ **CORS Protection** - Restricted origins
+- ✅ **Error Handling** - No sensitive data leakage
+
+### Security Measures Implemented
+
+**Rate Limiting:**
+```python
+# Atomic check-and-record with database locking
+def record_guest_upload_atomic(db, ip_address, max_uploads=2):
+    with db.begin_nested():
+        count = db.query(GuestUpload).filter(
+            GuestUpload.ip_address == ip_address,
+            GuestUpload.upload_date >= today_start
+        ).with_for_update().scalar()  # Row-level lock
+
+        if count >= max_uploads:
+            return False
+
+        db.add(GuestUpload(ip_address=ip_address))
+        db.commit()
+        return True
+```
+
+**Document Cleanup:**
+- Guest uploads: Deleted after 24 hours
+- User uploads: Deleted after 7 days
+- Demo document: Persists indefinitely
+- Background scheduler runs hourly
+
+---
 
 ## 🎯 Key Features
 
 ### Guest-Friendly Access
-- **Demo Document**: Pre-loaded sample lease agreement - try unlimited queries instantly
-- **Guest Uploads**: 2 free document uploads per day without sign-up (IP-based)
-- **Easy Testing**: Perfect for portfolio viewers and hiring managers
-- **Optional Registration**: Sign up to get 5 credits and persistent history
+- **Demo Document**: Pre-loaded Robinhood Cash Sweep Program - unlimited queries
+- **Guest Uploads**: 2 free documents/day without sign-up (IP-based)
+- **localStorage Persistence**: Upload counter persists across refreshes
+- **Easy Testing**: Perfect for portfolio reviewers
 
 ### Document Processing
 - **PDF Support**: Native PDF parsing and text extraction
-- **OCR Capability**: Handles scanned documents with Tesseract
-- **Chunking**: Intelligent text splitting for optimal AI processing
-- **Vector Embeddings**: FAISS-based semantic search
+- **OCR Fallback**: Handles scanned documents with Tesseract (300 DPI)
+- **Smart Chunking**: RecursiveCharacterTextSplitter (1000 chars, 200 overlap)
+- **Vector Embeddings**: OpenAI embeddings + FAISS indexing
 
 ### AI Analysis
-- **Legal Specialization**: Trained specifically for legal documents
-- **Context-Aware**: Uses document content for relevant responses
-- **Structured Output**: Formatted responses with bullet points and sections
-- **Multi-Language**: Supports various legal document types
+- **RAG Pipeline**: Retrieval-Augmented Generation with GPT-4
+- **Legal Specialization**: Custom system prompt for legal documents
+- **Context-Aware**: Top-3 semantic chunks retrieved per query
+- **Structured Output**: Markdown formatting with citations
+- **Multi-Question Detection**: Prompts users to ask one question at a time
 
 ### User Experience
-- **Real-time Upload**: Animated loading with magnifying glass
-- **Chat Interface**: Natural conversation with documents
-- **History Tracking**: Complete audit trail of uploads and queries (registered users)
-- **Credit Management**: Transparent usage tracking
+- **Custom Theme**: Bronze/dark Mantine UI theme
+- **Real-time Upload**: Animated loading states
+- **Chat Interface**: Natural Q&A with document context
+- **History Tracking**: Complete audit trail (registered users)
+- **Account Menu**: Credit tracking with sign-out option
+- **Responsive Design**: Mobile-friendly interface
 
-## 🛠️ Development
+---
 
-### Project Structure
+## 📊 Performance
+
+- **Document Processing**: ~10-30s for 50-page PDFs (depends on OCR)
+- **Query Response**: ~2-5s for AI analysis
+- **Vector Search**: Sub-second similarity search with FAISS
+- **File Size Limit**: 50MB per document
+- **Supported Formats**: PDF only (native + scanned with OCR)
+- **Concurrent Users**: Supports 100+ simultaneous users (tested with pytest-asyncio)
+
+---
+
+## 🚀 Deployment
+
+### Railway (Backend)
+
+See [`docs/RAILWAY_DEPLOY.md`](docs/RAILWAY_DEPLOY.md) for detailed instructions.
+
+**Quick Deploy:**
+```bash
+# Install Railway CLI
+npm install -g @railway/cli
+
+# Login
+railway login
+
+# Link to project
+railway link
+
+# Deploy
+railway up
 ```
-Legal_Lens/
-├── backend/
-│   ├── main.py              # FastAPI application with guest access
-│   ├── models.py            # SQLAlchemy models (User, Document, GuestUpload)
-│   ├── database.py          # Database configuration
-│   ├── db_services.py       # Database operations
-│   ├── tests/               # Test suite
-│   ├── requirements.txt     # Python dependencies
-│   └── lease.pdf           # (in parent dir) Demo document
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # React components
-│   │   ├── pages/          # Page components
-│   │   ├── contexts/       # React contexts
-│   │   └── App.tsx         # Main application
-│   └── package.json        # Node.js dependencies
-├── docker-compose.yml      # Docker orchestration
-└── README.md              # This file
+
+### Vercel (Frontend)
+
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy
+cd frontend
+vercel
+
+# Set environment variables in Vercel dashboard
+# VITE_API_BASE_URL=https://your-railway-app.up.railway.app
 ```
 
-### Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Run the test suite
-6. Submit a pull request
-
-## 📈 Performance
-
-- **Document Processing**: ~30 seconds for 50-page PDFs
-- **Query Response**: ~2-5 seconds for AI analysis
-- **Concurrent Users**: Supports 100+ simultaneous users
-- **File Size Limit**: 5MB per document
-- **Supported Formats**: PDF only
+---
 
 ## 🚨 Troubleshooting
 
 ### Common Issues
 
 **Backend won't start:**
-- Check if all environment variables are set
-- Verify Firebase Admin SDK credentials
-- Ensure OpenAI API key is valid
+```bash
+# Check environment variables
+cat backend/.env
+
+# Verify Firebase credentials
+ls backend/firebase-admin.json
+
+# Check OpenAI API key
+echo $OPENAI_API_KEY
+```
 
 **Frontend authentication fails:**
-- Verify Firebase configuration
-- Check CORS settings in backend
-- Ensure backend is running on correct port
+```bash
+# Verify Firebase config in frontend/.env.local
+# Check CORS settings in backend/main.py
+# Ensure backend is running on port 8000
+```
 
 **Document upload fails:**
-- Check file size (max 5MB)
+- Check file size (max 50MB)
 - Ensure file is PDF format
-- Verify user has sufficient credits
+- Verify user has credits (for registered users)
+- Check guest upload limit (2/day per IP)
 
-**AI responses are generic:**
-- Check OpenAI API key and quota
-- Verify document was processed correctly
-- Check vector store was created properly
+**AI responses are empty:**
+- Verify OpenAI API key is valid
+- Check OpenAI account has credits
+- Ensure document was processed correctly
+- Check vector store creation logs
+
+---
+
+## 📈 Future Enhancements
+
+- [ ] Support for more document types (DOCX, TXT)
+- [ ] Multi-language support
+- [ ] Document comparison feature
+- [ ] Export analysis to PDF
+- [ ] Stripe integration for credit purchases
+- [ ] PostgreSQL pgvector for persistent vector storage
+- [ ] Redis caching for repeated queries
+- [ ] Admin dashboard
+- [ ] Email notifications
+
+---
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
-## 🤝 Support
+---
 
-For support, please open an issue on GitHub or contact the development team.
+## 🙏 Acknowledgments
+
+- OpenAI for GPT-4 and embeddings API
+- LangChain for RAG framework
+- FAISS for vector similarity search
+- Firebase for authentication
+- Mantine UI for component library
 
 ---
 
-**Legal Lens** - Making legal document analysis accessible and intelligent. 🔍⚖️ 
+**Legal Lens** - Making legal document analysis accessible and intelligent. 🔍⚖️
+
+*Built with ❤️ for portfolio demonstration and real-world utility.*
