@@ -1,5 +1,5 @@
 import { AppShell, Group, Title, Text, rem, NavLink, Menu, Button, Badge } from '@mantine/core';
-import { IconHome, IconFileAnalytics, IconHistory, IconUser, IconLogout, IconCoins } from '@tabler/icons-react';
+import { IconFileAnalytics, IconHistory, IconUser, IconLogout, IconCoins } from '@tabler/icons-react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { auth } from '../firebase';

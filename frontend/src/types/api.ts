@@ -5,6 +5,7 @@ export interface UploadResponse {
   is_guest: boolean;
   credits_remaining?: number;
   guest_remaining_uploads?: number;
+  detail?: string;  // For error responses
 }
 
 export interface DocumentInfo {

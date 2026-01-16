@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Dropzone } from '@mantine/dropzone';
-import { Text, Group, rem, Button, useMantineTheme, Modal, Stack } from '@mantine/core';
+import { Text, Group, rem, useMantineTheme, Stack } from '@mantine/core';
 import { IconUpload, IconX, IconFile } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useAuth } from '../contexts/AuthContext';

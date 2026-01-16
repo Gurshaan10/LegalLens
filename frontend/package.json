@@ -18,6 +18,8 @@
     "@tabler/icons-react": "^2.47.0",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.6.7",
+    "firebase": "^12.8.0",
+    "framer-motion": "^12.26.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",
