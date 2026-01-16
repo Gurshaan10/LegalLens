@@ -52,11 +52,19 @@ class DocumentQuery(Base):
 
 class AnalysisSession(Base):
     __tablename__ = "analysis_sessions"
-    
+
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, nullable=True)
     session_date = Column(DateTime, default=datetime.utcnow)
     documents_processed = Column(Integer, default=0)
     total_queries = Column(Integer, default=0)
     session_duration_minutes = Column(Integer, nullable=True)
-    meta = Column(JSON, nullable=True) 
+    meta = Column(JSON, nullable=True)
+
+class GuestUpload(Base):
+    __tablename__ = "guest_uploads"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    ip_address = Column(String, nullable=False, index=True)
+    upload_date = Column(DateTime, default=datetime.utcnow, index=True)
+    document_id = Column(String, nullable=False) 

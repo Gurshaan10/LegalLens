@@ -1,16 +1,16 @@
 #main.py
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain.vectorstores.faiss import FAISS
+from langchain_community.vectorstores import FAISS
 from pypdf import PdfReader
 import os
 from openai import OpenAI
 from dotenv import load_dotenv
 import uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import logging
 from io import BytesIO
 import pytesseract
@@ -21,11 +21,12 @@ import time
 from sqlalchemy.orm import Session
 import firebase_admin
 from firebase_admin import auth as firebase_auth, credentials
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Optional
 
 # Import database components
 from database import get_db, create_tables, get_user_by_firebase_uid
-from models import Document, DocumentQuery, User
+from models import Document, DocumentQuery, User, GuestUpload
 from db_services import save_document, save_query, get_document_history, get_document_queries, get_user_activity_summary
 
 # Configure logging
@@ -64,10 +65,176 @@ document_stores = {}
 # Create database tables on startup
 create_tables()
 
+@app.on_event("startup")
+async def load_demo_document():
+    """Load demo document on application startup"""
+    try:
+        if not os.path.exists(DEMO_DOCUMENT_PATH):
+            logger.warning(f"Demo document not found at {DEMO_DOCUMENT_PATH}")
+            return
+
+        logger.info(f"Loading demo document from {DEMO_DOCUMENT_PATH}")
+
+        with open(DEMO_DOCUMENT_PATH, "rb") as f:
+            contents = f.read()
+
+        pdf_file = BytesIO(contents)
+        reader = PdfReader(pdf_file)
+
+        # Extract text
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text()
+
+        if not text.strip():
+            # Try OCR for scanned PDFs
+            text = extract_text_with_ocr(contents)
+
+        # Split text into chunks
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len
+        )
+        chunks = text_splitter.split_text(text)
+
+        # Create embeddings and store them
+        embeddings = OpenAIEmbeddings()
+        vectorstore = FAISS.from_texts(chunks, embeddings)
+
+        document_stores[DEMO_DOCUMENT_ID] = {
+            "filename": "Robinhood Cash Sweep Program (Demo)",
+            "vectorstore": vectorstore,
+            "chunks": chunks,
+            "text": text,
+            "is_demo": True,
+            "created_at": datetime.utcnow(),  # Track creation time
+            "is_guest_upload": False  # Demo documents never expire
+        }
+
+        logger.info(f"Demo document loaded successfully with {len(chunks)} chunks")
+    except Exception as e:
+        logger.error(f"Failed to load demo document: {e}")
+
 # Initialize Firebase Admin SDK (only once)
 if not firebase_admin._apps:
     cred = credentials.Certificate(os.getenv("FIREBASE_ADMIN_CREDENTIAL") or "firebase-admin.json")
     firebase_admin.initialize_app(cred)
+
+# Demo document configuration
+DEMO_DOCUMENT_ID = "demo-robinhood-document"
+DEMO_DOCUMENT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "robinhood.pdf")
+
+# Document cleanup scheduler
+def cleanup_old_documents():
+    """Remove documents older than 24 hours for guests, 7 days for users"""
+    cutoff_guest = datetime.utcnow() - timedelta(hours=24)
+    cutoff_user = datetime.utcnow() - timedelta(days=7)
+
+    to_delete = []
+    for doc_id, doc_data in document_stores.items():
+        # Skip demo documents
+        if doc_data.get("is_demo"):
+            continue
+
+        created = doc_data.get("created_at")
+        if not created:
+            continue
+
+        is_guest = doc_data.get("is_guest_upload", False)
+        cutoff = cutoff_guest if is_guest else cutoff_user
+
+        if created < cutoff:
+            to_delete.append(doc_id)
+
+    for doc_id in to_delete:
+        del document_stores[doc_id]
+        logger.info(f"Cleaned up document: {doc_id}")
+
+    if to_delete:
+        logger.info(f"Cleanup complete: Removed {len(to_delete)} old documents")
+
+# Initialize cleanup scheduler
+import threading
+def run_cleanup_scheduler():
+    """Run cleanup every hour"""
+    while True:
+        try:
+            time.sleep(3600)  # Sleep for 1 hour
+            cleanup_old_documents()
+        except Exception as e:
+            logger.error(f"Cleanup scheduler error: {e}")
+
+# Start cleanup thread
+cleanup_thread = threading.Thread(target=run_cleanup_scheduler, daemon=True)
+cleanup_thread.start()
+logger.info("Document cleanup scheduler started (runs every hour)")
+
+# Helper functions for guest access
+def get_client_ip(request: Request) -> str:
+    """
+    Extract client IP address from request.
+    For dev/portfolio: Uses request.client.host directly (ignores X-Forwarded-For to prevent spoofing).
+    For production: Configure trusted proxies in FastAPI settings if needed.
+    """
+    return request.client.host if request.client else "unknown"
+
+def check_guest_upload_limit(db: Session, ip_address: str, max_uploads: int = 2) -> bool:
+    """Check if guest IP has reached daily upload limit (non-atomic, for query only)"""
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    upload_count = db.query(GuestUpload).filter(
+        GuestUpload.ip_address == ip_address,
+        GuestUpload.upload_date >= today_start
+    ).count()
+
+    return upload_count < max_uploads
+
+def record_guest_upload_atomic(db: Session, ip_address: str, document_id: str, max_uploads: int = 2) -> bool:
+    """
+    Atomically check and record guest upload.
+    Returns True if upload was recorded successfully, False if limit exceeded.
+    Uses database-level locking to prevent race conditions.
+    """
+    from sqlalchemy import func
+
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    try:
+        # Use a savepoint for nested transaction
+        db.begin_nested()
+
+        # Count with row-level lock (FOR UPDATE prevents concurrent reads)
+        upload_count = db.query(func.count(GuestUpload.id)).filter(
+            GuestUpload.ip_address == ip_address,
+            GuestUpload.upload_date >= today_start
+        ).with_for_update().scalar()
+
+        if upload_count >= max_uploads:
+            db.rollback()
+            return False
+
+        # Insert new record
+        guest_upload = GuestUpload(
+            ip_address=ip_address,
+            document_id=document_id
+        )
+        db.add(guest_upload)
+        db.commit()
+        return True
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error recording guest upload: {e}")
+        return False
+
+def record_guest_upload(db: Session, ip_address: str, document_id: str):
+    """Record a guest upload in the database (legacy, non-atomic)"""
+    guest_upload = GuestUpload(
+        ip_address=ip_address,
+        document_id=document_id
+    )
+    db.add(guest_upload)
+    db.commit()
 
 def extract_text_with_ocr(pdf_bytes: bytes) -> str:
     """Extract text from scanned PDF using OCR"""
@@ -95,7 +262,7 @@ def extract_text_with_ocr(pdf_bytes: bytes) -> str:
         raise e
 
 class Query(BaseModel):
-    query: str
+    query: str = Field(..., max_length=500, min_length=1, description="Query text (max 500 characters)")
 
 class HistoryResponse(BaseModel):
     documents: list
@@ -103,6 +270,7 @@ class HistoryResponse(BaseModel):
     total_size_bytes: int
 
 def get_current_user(authorization: str = Header(...), db=Depends(get_db)):
+    """Get current authenticated user (required)"""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
     id_token = authorization.split(" ", 1)[1]
@@ -115,7 +283,7 @@ def get_current_user(authorization: str = Header(...), db=Depends(get_db)):
     # Get or create user in DB
     user = get_user_by_firebase_uid(db, firebase_uid)
     if not user:
-        user = User(firebase_uid=firebase_uid, email=email, credits=1)
+        user = User(firebase_uid=firebase_uid, email=email, credits=5)  # 5 credits for registered users
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -124,15 +292,79 @@ def get_current_user(authorization: str = Header(...), db=Depends(get_db)):
         db.commit()
     return user
 
+def get_optional_user(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> Optional[User]:
+    """Get current user if authenticated, None otherwise (for optional auth endpoints)"""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    try:
+        id_token = authorization.split(" ", 1)[1]
+        decoded_token = firebase_auth.verify_id_token(id_token)
+        firebase_uid = decoded_token["uid"]
+        email = decoded_token.get("email")
+
+        user = get_user_by_firebase_uid(db, firebase_uid)
+        if not user:
+            user = User(firebase_uid=firebase_uid, email=email, credits=5)  # 5 credits for registered users
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+        else:
+            user.last_login = datetime.utcnow()
+            db.commit()
+        return user
+    except Exception as e:
+        logger.warning(f"Failed to authenticate user: {e}")
+        return None
+
 @app.post("/upload/")
-async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+async def upload_file(
+    request: Request,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user)
+):
     logger.info(f"Receiving file: {file.filename}")
+
+    # Handle guest vs authenticated users
+    is_guest = user is None
+    client_ip = None  # Initialize for later use
+    document_id = str(uuid.uuid4())  # Generate ID early for atomic recording
+
+    if is_guest:
+        client_ip = get_client_ip(request)
+        logger.info(f"Guest upload from IP: {client_ip}")
+
+        # Atomically check and record upload - prevents race conditions
+        if not record_guest_upload_atomic(db, client_ip, document_id):
+            raise HTTPException(
+                status_code=429,
+                detail="Daily upload limit reached for guest users. Please sign in to get more credits."
+            )
+        logger.info(f"Guest upload atomically recorded for IP: {client_ip}")
+    else:
+        logger.info(f"Authenticated upload from user: {user.email}")
+        # Check if user has credits
+        if user.credits <= 0:
+            raise HTTPException(
+                status_code=403,
+                detail="Insufficient credits. You have used all your upload credits."
+            )
     
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are allowed")
 
+    # Add file size validation (50MB max)
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB in bytes
+
     try:
         contents = await file.read()
+
+        # Check file size
+        if len(contents) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail="File too large. Maximum file size is 50MB."
+            )
         logger.info(f"File read: {len(contents)} bytes")
         logger.info(f"File content type: {type(contents)}")
         logger.info(f"First 100 bytes: {contents[:100]}")
@@ -196,13 +428,14 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
         vectorstore = FAISS.from_texts(chunks, embeddings)
         logger.info("Created embeddings and vector store")
         
-        # Generate a unique ID for this document
-        document_id = str(uuid.uuid4())
+        # Use the pre-generated document_id (for guests, already recorded atomically)
         document_stores[document_id] = {
             "filename": file.filename,
             "vectorstore": vectorstore,
             "chunks": chunks,
-            "text": text
+            "text": text,
+            "created_at": datetime.utcnow(),  # Track creation time for cleanup
+            "is_guest_upload": is_guest  # Track if guest upload (24h TTL vs 7d for users)
         }
         logger.info(f"Document stored with ID: {document_id}")
 
@@ -211,9 +444,10 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
             meta = {
                 "pages": len(reader.pages),
                 "chunks": len(chunks),
-                "processing_method": "ocr" if not text.strip() else "text_extraction"
+                "processing_method": "ocr" if not text.strip() else "text_extraction",
+                "is_guest_upload": is_guest
             }
-            
+
             db_document = save_document(
                 db=db,
                 filename=document_id,
@@ -221,7 +455,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
                 file_size=len(contents),
                 text_content=text[:10000],  # Store first 10k chars for preview
                 text_length=len(text),      # Store actual total text length
-                user_id=user.id,
+                user_id=user.id if user else None,
                 meta=meta
             )
             logger.info(f"Document saved to database with ID: {db_document.id}")
@@ -229,20 +463,33 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
             logger.error(f"Failed to save to database: {e}")
             # Continue without database save for now
 
-        # Check user.credits > 0, decrement, and associate document with user_id
-        if user.credits > 0:
-            user.credits -= 1
-            db.commit()
+        # Handle credit deduction for authenticated users (guest upload already recorded atomically)
+        if not is_guest:
+            # Deduct credit for authenticated users
+            if user.credits > 0:
+                user.credits -= 1
+                db.commit()
+                logger.info(f"User {user.email} credits remaining: {user.credits}")
 
-        return {"document_id": document_id}
+        return {
+            "document_id": document_id,
+            "is_guest": is_guest,
+            "credits_remaining": user.credits if user else None
+        }
         
     except Exception as e:
         logger.error(f"Error processing file: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/query/{document_id}")
-async def query_document(document_id: str, query: Query, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+async def query_document(
+    document_id: str,
+    query: Query,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user)
+):
     logger.info(f"Querying document {document_id} with query: {query.dict()}")
+    is_guest = user is None
     
     if document_id not in document_stores:
         logger.error(f"Document ID {document_id} not found in document_stores. Available IDs: {list(document_stores.keys())}")
@@ -400,7 +647,7 @@ async def get_document_queries_history(document_id: str, db: Session = Depends(g
 
 @app.get("/me")
 async def get_me(user: User = Depends(get_current_user)):
-    return {
+    response = {
         "id": user.id,
         "firebase_uid": user.firebase_uid,
         "email": user.email,
@@ -408,6 +655,63 @@ async def get_me(user: User = Depends(get_current_user)):
         "created_at": user.created_at.isoformat(),
         "last_login": user.last_login.isoformat() if user.last_login else None
     }
+    logger.info(f"GET /me - User: {user.email}, Credits: {user.credits}")
+    return response
+
+@app.get("/demo")
+async def get_demo_document():
+    """Get demo document information"""
+    if DEMO_DOCUMENT_ID in document_stores:
+        demo_doc = document_stores[DEMO_DOCUMENT_ID]
+        return {
+            "document_id": DEMO_DOCUMENT_ID,
+            "filename": demo_doc["filename"],
+            "available": True,
+            "chunks": len(demo_doc.get("chunks", [])),
+            "is_demo": True
+        }
+    return {
+        "document_id": DEMO_DOCUMENT_ID,
+        "available": False,
+        "message": "Demo document not loaded"
+    }
+
+@app.get("/document/{document_id}")
+async def get_document_info(document_id: str):
+    """Get document information (works with or without authentication)"""
+    if document_id not in document_stores:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    doc = document_stores[document_id]
+    return {
+        "document_id": document_id,
+        "filename": doc["filename"],
+        "chunks": len(doc.get("chunks", [])),
+        "text_length": len(doc.get("text", "")),
+        "is_demo": doc.get("is_demo", False),
+        "can_view": doc.get("is_demo", False)  # Only demo documents can be viewed/downloaded
+    }
+
+@app.get("/document/{document_id}/view")
+async def view_document(document_id: str):
+    """View/download document PDF (currently only demo document)"""
+    from fastapi.responses import FileResponse
+
+    # Only allow viewing demo document for now
+    if document_id != DEMO_DOCUMENT_ID:
+        raise HTTPException(status_code=403, detail="Document viewing is only available for demo documents")
+
+    if not os.path.exists(DEMO_DOCUMENT_PATH):
+        raise HTTPException(status_code=404, detail="Demo document file not found")
+
+    return FileResponse(
+        path=DEMO_DOCUMENT_PATH,
+        media_type="application/pdf",
+        filename="robinhood-cash-sweep-program.pdf",
+        headers={
+            "Content-Disposition": "inline; filename=robinhood-cash-sweep-program.pdf"
+        }
+    )
 
 @app.get("/health")
 async def health_check():

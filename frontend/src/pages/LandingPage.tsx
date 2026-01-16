@@ -75,12 +75,12 @@ export default function LandingPage() {
               size="lg"
               color="bronze"
               variant="filled"
-              onClick={() => navigate('/login')}
+              onClick={() => navigate('/analysis')}
               style={{
                 background: 'linear-gradient(45deg, var(--mantine-color-bronze-8) 0%, var(--mantine-color-bronze-5) 100%)',
               }}
             >
-              Get Started
+              Try Free Demo
             </Button>
             <Button
               size="lg"

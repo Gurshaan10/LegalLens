@@ -2,6 +2,28 @@
 
 A full-stack legal document analysis web application powered by AI. Upload legal documents and get instant, intelligent analysis using advanced NLP and vector search capabilities.
 
+**Try it instantly** - No sign-up required! Query our demo document or upload your own (2 free uploads per day for guests).
+
+## 👋 For Portfolio Reviewers & Hiring Managers
+
+Want to see Legal Lens in action without setting up accounts? Here's how:
+
+### Instant Demo (30 seconds)
+1. **Start the app** (see Quick Start below)
+2. **Query the demo document** at `http://localhost:8000/demo` - it's pre-loaded!
+3. **Try asking**: "What is the monthly rent?" or "What are the tenant's responsibilities?"
+
+### Test with Your Own Document (1 minute)
+- Upload any legal PDF (up to 5MB) - **no sign-up needed**
+- Get 2 free uploads per day to fully test the AI capabilities
+- Experience the OCR, vector search, and GPT-4 analysis
+
+### Full Feature Access (Optional)
+- Sign in with Google to get **5 credits** and persistent history
+- Perfect for evaluating the complete authentication and credit system
+
+**Bottom line:** You can evaluate all core features in under 2 minutes without creating any accounts! 🚀
+
 ## 🏗️ Architecture
 
 ```
@@ -29,6 +51,17 @@ A full-stack legal document analysis web application powered by AI. Upload legal
                        └─────────────────┘
 ```
 
+## 💳 Credit System
+
+Legal Lens uses a flexible credit system to manage usage:
+
+| User Type | Credits | Limits | Features |
+|-----------|---------|--------|----------|
+| **Guest** | N/A | 2 uploads/day (per IP) | • Query demo document (unlimited)<br>• Upload own documents (2/day)<br>• No persistent history |
+| **Registered** | 5 initial credits | 1 credit per upload | • 5 free uploads on sign-up<br>• Persistent history<br>• Full account features |
+
+**Note:** Querying documents (both demo and uploaded) is always free and unlimited for all users!
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -36,7 +69,7 @@ A full-stack legal document analysis web application powered by AI. Upload legal
 - Python 3.10+
 - Node.js 18+
 - Docker (optional)
-- Firebase Project
+- Firebase Project (for authentication features)
 - OpenAI API Key
 
 ### Option 1: Docker (Recommended)
@@ -130,6 +163,68 @@ REACT_APP_API_URL=http://localhost:8000
 
 ## 📚 API Documentation
 
+### Public Endpoints (No Auth Required)
+
+#### GET /demo
+Get demo document information.
+
+**Response:**
+```json
+{
+  "document_id": "demo-lease-document",
+  "filename": "Sample Lease Agreement (Demo)",
+  "available": true,
+  "chunks": 109,
+  "is_demo": true
+}
+```
+
+#### POST /query/demo-lease-document
+Query the demo document (unlimited, no auth needed).
+
+**Body:**
+```json
+{
+  "query": "What is the monthly rent amount?"
+}
+```
+
+**Response:**
+```json
+{
+  "answer": "The monthly rent amount is $3,300.00..."
+}
+```
+
+#### POST /upload/ (Guest Mode)
+Upload up to 2 documents per day without authentication.
+
+**Headers:**
+```
+Content-Type: multipart/form-data
+```
+
+**Body:**
+```
+file: <pdf_file>
+```
+
+**Response:**
+```json
+{
+  "document_id": "uuid-string",
+  "is_guest": true,
+  "credits_remaining": null
+}
+```
+
+**Rate Limiting:** 2 uploads per IP per day. Returns 429 error when exceeded:
+```json
+{
+  "detail": "Daily upload limit reached for guest users. Please sign in to get more credits."
+}
+```
+
 ### Authentication Endpoints
 
 #### GET /me
@@ -143,17 +238,19 @@ Authorization: Bearer <firebase_id_token>
 **Response:**
 ```json
 {
-  "id": 1,
+  "id": "user-uuid",
   "email": "user@example.com",
-  "name": "John Doe",
-  "credits": 10
+  "firebase_uid": "firebase-uid",
+  "credits": 5,
+  "created_at": "2024-01-15T10:30:00Z",
+  "last_login": "2024-01-15T10:30:00Z"
 }
 ```
 
 ### Document Management
 
-#### POST /upload/
-Upload a legal document for analysis.
+#### POST /upload/ (Authenticated)
+Upload a legal document for analysis. Requires authentication and deducts 1 credit.
 
 **Headers:**
 ```
@@ -170,17 +267,17 @@ file: <pdf_file>
 ```json
 {
   "document_id": "uuid-string",
-  "filename": "document.pdf",
-  "message": "Document uploaded successfully"
+  "is_guest": false,
+  "credits_remaining": 4
 }
 ```
 
 ### Query Endpoints
 
 #### POST /query/{document_id}
-Query a specific document.
+Query a specific document (works with or without authentication).
 
-**Headers:**
+**Headers (Optional):**
 ```
 Authorization: Bearer <firebase_id_token>
 Content-Type: application/json
@@ -196,8 +293,7 @@ Content-Type: application/json
 **Response:**
 ```json
 {
-  "response": "This contract contains the following key terms...",
-  "query_id": "query-uuid"
+  "answer": "This contract contains the following key terms..."
 }
 ```
 
@@ -246,6 +342,28 @@ Authorization: Bearer <firebase_id_token>
 
 ## 🧪 Testing
 
+### Quick Test (No Setup Required)
+
+Test the guest features immediately without authentication:
+
+```bash
+# Check if demo document is available
+curl http://localhost:8000/demo
+
+# Query the demo document (no auth needed)
+curl -X POST http://localhost:8000/query/demo-lease-document \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the monthly rent amount?"}'
+
+# Test guest upload (2 per day per IP)
+curl -X POST http://localhost:8000/upload/ \
+  -F "file=@your-document.pdf"
+
+# Test rate limiting (3rd upload should fail)
+curl -X POST http://localhost:8000/upload/ \
+  -F "file=@your-document.pdf"
+```
+
 ### Run All Tests
 ```bash
 cd backend
@@ -269,8 +387,9 @@ pytest --cov=. --cov-report=html
 
 ### Test Categories
 
-- **Authentication Tests**: Firebase token verification, user creation
+- **Authentication Tests**: Firebase token verification, user creation, optional auth
 - **Credit Tests**: Credit deduction, validation, edge cases
+- **Guest Access Tests**: IP-based rate limiting, demo document access
 - **QA Tests**: Document querying, AI responses, error handling
 - **Integration Tests**: End-to-end workflows
 
@@ -310,14 +429,22 @@ pytest --cov=. --cov-report=html
 
 ## 🔒 Security Features
 
-- **Firebase Authentication**: Secure Google OAuth integration
+- **Firebase Authentication**: Secure Google OAuth integration for registered users
 - **Token Verification**: Server-side Firebase ID token validation
-- **User Isolation**: Users can only access their own documents
-- **Credit System**: Prevents abuse and controls usage
+- **IP-Based Rate Limiting**: Prevents abuse from guest users (2 uploads/day per IP)
+- **User Isolation**: Registered users can only access their own documents
+- **Credit System**: Prevents abuse and controls usage for authenticated users
+- **Optional Auth**: Flexible authentication for demo and guest access
 - **Input Validation**: Comprehensive request validation
 - **Error Handling**: Secure error responses without data leakage
 
 ## 🎯 Key Features
+
+### Guest-Friendly Access
+- **Demo Document**: Pre-loaded sample lease agreement - try unlimited queries instantly
+- **Guest Uploads**: 2 free document uploads per day without sign-up (IP-based)
+- **Easy Testing**: Perfect for portfolio viewers and hiring managers
+- **Optional Registration**: Sign up to get 5 credits and persistent history
 
 ### Document Processing
 - **PDF Support**: Native PDF parsing and text extraction
@@ -334,7 +461,7 @@ pytest --cov=. --cov-report=html
 ### User Experience
 - **Real-time Upload**: Animated loading with magnifying glass
 - **Chat Interface**: Natural conversation with documents
-- **History Tracking**: Complete audit trail of uploads and queries
+- **History Tracking**: Complete audit trail of uploads and queries (registered users)
 - **Credit Management**: Transparent usage tracking
 
 ## 🛠️ Development
@@ -343,12 +470,13 @@ pytest --cov=. --cov-report=html
 ```
 Legal_Lens/
 ├── backend/
-│   ├── main.py              # FastAPI application
-│   ├── models.py            # SQLAlchemy models
+│   ├── main.py              # FastAPI application with guest access
+│   ├── models.py            # SQLAlchemy models (User, Document, GuestUpload)
 │   ├── database.py          # Database configuration
 │   ├── db_services.py       # Database operations
 │   ├── tests/               # Test suite
-│   └── requirements.txt     # Python dependencies
+│   ├── requirements.txt     # Python dependencies
+│   └── lease.pdf           # (in parent dir) Demo document
 ├── frontend/
 │   ├── src/
 │   │   ├── components/      # React components

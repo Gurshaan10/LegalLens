@@ -1,28 +1,65 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dropzone } from '@mantine/dropzone';
 import { Text, Group, rem, Button, useMantineTheme, Modal, Stack } from '@mantine/core';
 import { IconUpload, IconX, IconFile } from '@tabler/icons-react';
 import { notifications } from '@mantine/notifications';
 import { useAuth } from '../contexts/AuthContext';
+import apiEndpoints from '../config/api';
+import type { UploadResponse } from '../types/api';
 
 interface DocumentUploadProps {
   onUploadSuccess: (filename: string) => void;
-  credits: number;
+  credits?: number;
+  isGuest?: boolean;
 }
 
-export default function DocumentUpload({ onUploadSuccess, credits }: DocumentUploadProps) {
+export default function DocumentUpload({ onUploadSuccess, credits, isGuest = false }: DocumentUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
+  const [guestUploadsRemaining, setGuestUploadsRemaining] = useState(() => {
+    // Initialize from localStorage for guest users
+    if (!isGuest) return 2;
+
+    const stored = localStorage.getItem('guest_uploads_remaining');
+    const date = localStorage.getItem('guest_uploads_date');
+    const today = new Date().toDateString();
+
+    // Reset counter if it's a new day
+    if (date === today && stored) {
+      return parseInt(stored, 10);
+    }
+    return 2;
+  });
   const theme = useMantineTheme();
-  const { getIdToken } = useAuth();
+  const { getIdToken, user } = useAuth();
+
+  // Update localStorage whenever guest uploads remaining changes
+  useEffect(() => {
+    if (isGuest) {
+      localStorage.setItem('guest_uploads_remaining', String(guestUploadsRemaining));
+      localStorage.setItem('guest_uploads_date', new Date().toDateString());
+    }
+  }, [guestUploadsRemaining, isGuest]);
 
   const handleDrop = async (files: File[]) => {
     if (files.length === 0) return;
 
-    if (credits === 0) {
+    // Check credits for authenticated users
+    if (!isGuest && credits === 0) {
       notifications.show({
         title: 'No Credits',
-        message: 'You have no credits left. Please upgrade or contact support.',
+        message: 'You have no credits left. Please sign in or upgrade for more uploads.',
         color: 'red',
+      });
+      return;
+    }
+
+    // Check guest upload limit
+    if (isGuest && guestUploadsRemaining <= 0) {
+      notifications.show({
+        title: 'Daily Limit Reached',
+        message: 'You\'ve reached the daily limit for guest uploads (2 per day). Sign in to get 5 credits!',
+        color: 'orange',
+        autoClose: 5000,
       });
       return;
     }
@@ -44,30 +81,63 @@ export default function DocumentUpload({ onUploadSuccess, credits }: DocumentUpl
     formData.append('file', file);
 
     try {
-      const idToken = await getIdToken();
-      if (!idToken) throw new Error('Not authenticated');
       console.log('Sending request to upload endpoint...');
-      const response = await fetch('http://localhost:8000/upload/', {
+      const headers: Record<string, string> = {};
+
+      // Add authorization header only if user is authenticated
+      if (!isGuest && user) {
+        const idToken = await getIdToken();
+        if (idToken) {
+          headers['Authorization'] = `Bearer ${idToken}`;
+        }
+      }
+
+      const response = await fetch(apiEndpoints.upload, {
         method: 'POST',
         body: formData,
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-        },
+        headers,
       });
 
       console.log('Response status:', response.status);
-      const data = await response.json();
+      const data: UploadResponse = await response.json();
       console.log('Response data:', data);
 
       if (!response.ok) {
+        // Handle rate limit error specifically
+        if (response.status === 429) {
+          if (isGuest) {
+            setGuestUploadsRemaining(0);
+          }
+          notifications.show({
+            title: 'Daily Limit Reached',
+            message: data.detail || 'You\'ve reached your daily upload limit. Sign in to get more credits!',
+            color: 'orange',
+            autoClose: 7000,
+          });
+          return;
+        }
         throw new Error(data.detail || 'Upload failed');
       }
 
+      // Update remaining uploads for guest users
+      let newRemainingCount = guestUploadsRemaining;
+      if (isGuest && data.is_guest) {
+        newRemainingCount = Math.max(0, guestUploadsRemaining - 1);
+        setGuestUploadsRemaining(newRemainingCount);
+      }
+
+      // Call success callback to open chat interface
       onUploadSuccess(data.document_id);
+
+      const successMessage = isGuest
+        ? `Document uploaded! ${newRemainingCount} guest upload(s) remaining today.`
+        : `Document uploaded successfully! ${data.credits_remaining || 0} credit(s) remaining.`;
+
       notifications.show({
         title: 'Success',
-        message: 'Document uploaded successfully',
+        message: successMessage,
         color: 'bronze',
+        autoClose: 5000,
       });
     } catch (error) {
       console.error('Upload error:', error);
@@ -87,8 +157,8 @@ export default function DocumentUpload({ onUploadSuccess, credits }: DocumentUpl
         onDrop={handleDrop}
         maxSize={5 * 1024 ** 2}
         accept={['application/pdf']}
-        loading={isUploading || credits === 0}
-        disabled={credits === 0}
+        loading={isUploading || (!isGuest && credits === 0) || (isGuest && guestUploadsRemaining === 0)}
+        disabled={(!isGuest && credits === 0) || (isGuest && guestUploadsRemaining === 0)}
         style={{
           borderColor: theme.colors.bronze[3],
           backgroundColor: theme.colors.dark[7]
@@ -130,9 +200,19 @@ export default function DocumentUpload({ onUploadSuccess, credits }: DocumentUpl
             <Text size="sm" c="bronze.5" inline mt={7}>
               File should not exceed 5MB
             </Text>
-            {credits === 0 && (
+            {isGuest && (
+              <Text size="sm" c="bronze.4" mt={7} fw={500}>
+                Guest Mode: {guestUploadsRemaining} free upload{guestUploadsRemaining !== 1 ? 's' : ''} remaining today
+              </Text>
+            )}
+            {!isGuest && credits === 0 && (
               <Text size="sm" c="red.5" mt={7}>
                 You have no credits left. Please upgrade or contact support.
+              </Text>
+            )}
+            {isGuest && guestUploadsRemaining === 0 && (
+              <Text size="sm" c="orange.5" mt={7}>
+                Daily limit reached. Sign in to get 5 credits!
               </Text>
             )}
           </div>

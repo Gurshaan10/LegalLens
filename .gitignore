@@ -135,9 +135,6 @@ jspm_packages/
 tmp/
 temp/
 
-# PDF files (test documents)
-*.pdf
-
 # Docker
 .dockerignore
 

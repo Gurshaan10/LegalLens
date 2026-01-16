@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Paper,
   TextInput,
@@ -11,9 +11,13 @@ import {
   useMantineTheme,
   rem,
   Box,
+  Collapse,
+  Badge,
 } from '@mantine/core';
-import { IconSend, IconRefresh } from '@tabler/icons-react';
+import { IconSend, IconRefresh, IconFileText, IconChevronDown, IconChevronUp, IconEye } from '@tabler/icons-react';
 import { useAuth } from '../contexts/AuthContext';
+import apiEndpoints from '../config/api';
+import type { DocumentInfo, QueryResponse } from '../types/api';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -23,6 +27,7 @@ interface Message {
 interface ChatInterfaceProps {
   documentId: string;
   onReset: () => void;
+  isGuest?: boolean;
 }
 
 // Function to format text with proper line breaks and styling
@@ -80,31 +85,78 @@ const formatMessage = (content: string) => {
   });
 };
 
-export default function ChatInterface({ documentId, onReset }: ChatInterfaceProps) {
+export default function ChatInterface({ documentId, onReset, isGuest = false }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [documentInfo, setDocumentInfo] = useState<DocumentInfo | null>(null);
+  const [showDocInfo, setShowDocInfo] = useState(false);
   const theme = useMantineTheme();
-  const { getIdToken } = useAuth();
+  const { getIdToken, user } = useAuth();
+
+  // Fetch document information on mount
+  useEffect(() => {
+    const fetchDocumentInfo = async () => {
+      try {
+        const response = await fetch(apiEndpoints.documentInfo(documentId));
+        if (response.ok) {
+          const data = await response.json();
+          setDocumentInfo(data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch document info:', error);
+      }
+    };
+    fetchDocumentInfo();
+  }, [documentId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
 
-    const userMessage = { role: 'user' as const, content: input.trim() };
+    // Check for multiple questions (numbered lists like "1.", "2." only)
+    // Allow multiple ? marks in a single question (like "Really???" or "Is this safe???")
+    const trimmedInput = input.trim();
+    const hasNumberedList = /^\d+\.|["']\d+\.|[.!]\s*\d+\./m.test(trimmedInput);
+
+    // Check for multiple distinct questions by looking for ? followed by non-? content and another ?
+    // This allows "Really???" but catches "What is X? What is Y?"
+    const hasMultipleQuestions = /\?\s*[^?]+\?/.test(trimmedInput);
+
+    if (hasNumberedList || hasMultipleQuestions) {
+      setMessages((prev) => [
+        ...prev,
+        { role: 'user' as const, content: trimmedInput },
+        {
+          role: 'assistant',
+          content: '⚠️ **Please ask one question at a time for better accuracy.**\n\nI noticed you asked multiple questions. For the best results, please:\n\n• Ask one specific question per query\n• Wait for my response\n• Then ask your next question\n\nThis helps me provide more accurate and detailed answers for each question.',
+        },
+      ]);
+      setInput('');
+      return;
+    }
+
+    const userMessage = { role: 'user' as const, content: trimmedInput };
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
 
     try {
-      const idToken = await getIdToken();
-      if (!idToken) throw new Error('Not authenticated');
-      const response = await fetch(`http://localhost:8000/query/${documentId}`, {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Add authorization header only if user is authenticated
+      if (!isGuest && user) {
+        const idToken = await getIdToken();
+        if (idToken) {
+          headers['Authorization'] = `Bearer ${idToken}`;
+        }
+      }
+
+      const response = await fetch(apiEndpoints.query(documentId), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
+        headers,
         body: JSON.stringify({
           query: userMessage.content
         }),
@@ -147,19 +199,85 @@ export default function ChatInterface({ documentId, onReset }: ChatInterfaceProp
         height: 'calc(100vh - 180px)'
       }}
     >
-      <Group justify="space-between" mb="md">
-        <Text size="lg" fw={500} c="bronze.3">
-          Chat with your Document
-        </Text>
-        <ActionIcon
-          variant="light"
-          color="bronze"
-          onClick={onReset}
-          title="Upload new document"
-        >
-          <IconRefresh size={20} />
-        </ActionIcon>
-      </Group>
+      {/* Document Header */}
+      <Stack gap="xs" mb="md">
+        <Group justify="space-between">
+          <Group>
+            <IconFileText size={24} color={theme.colors.bronze[4]} />
+            <div>
+              <Text size="lg" fw={500} c="bronze.3">
+                {documentInfo?.filename || 'Document Analysis'}
+              </Text>
+              {documentInfo?.is_demo && (
+                <Badge color="bronze" variant="dot" size="sm">Demo Document</Badge>
+              )}
+            </div>
+          </Group>
+          <Group>
+            {documentInfo?.can_view && (
+              <ActionIcon
+                variant="filled"
+                color="bronze"
+                onClick={() => window.open(apiEndpoints.documentView(documentId), '_blank')}
+                title="View PDF document"
+              >
+                <IconEye size={18} />
+              </ActionIcon>
+            )}
+            <ActionIcon
+              variant="subtle"
+              color="bronze"
+              onClick={() => setShowDocInfo(!showDocInfo)}
+              title="View document details"
+            >
+              {showDocInfo ? <IconChevronUp size={18} /> : <IconChevronDown size={18} />}
+            </ActionIcon>
+            <ActionIcon
+              variant="light"
+              color="bronze"
+              onClick={onReset}
+              title="Upload new document"
+            >
+              <IconRefresh size={20} />
+            </ActionIcon>
+          </Group>
+        </Group>
+
+        {/* Collapsible Document Info */}
+        <Collapse in={showDocInfo}>
+          <Paper p="sm" bg="dark.8" radius="sm">
+            <Stack gap="xs">
+              <Group gap="xl">
+                <div>
+                  <Text size="xs" c="bronze.5" fw={500}>Document Chunks</Text>
+                  <Text size="sm" c="dark.0">{documentInfo?.chunks || 0}</Text>
+                </div>
+                <div>
+                  <Text size="xs" c="bronze.5" fw={500}>Text Length</Text>
+                  <Text size="sm" c="dark.0">
+                    {documentInfo?.text_length?.toLocaleString() || 0} characters
+                  </Text>
+                </div>
+              </Group>
+              <Text size="xs" c="dark.2">
+                This document has been processed and is ready for analysis. Ask any questions about its content.
+              </Text>
+              {documentInfo?.can_view && (
+                <Button
+                  size="xs"
+                  variant="light"
+                  color="bronze"
+                  leftSection={<IconEye size={14} />}
+                  onClick={() => window.open(apiEndpoints.documentView(documentId), '_blank')}
+                  fullWidth
+                >
+                  View Full PDF Document
+                </Button>
+              )}
+            </Stack>
+          </Paper>
+        </Collapse>
+      </Stack>
 
       <ScrollArea 
         flex={1} 

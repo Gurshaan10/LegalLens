@@ -9,6 +9,10 @@ load_dotenv()
 # Database URL - use environment variable or default to SQLite for development
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./legal_lens.db")
 
+# Railway PostgreSQL uses postgres:// but SQLAlchemy needs postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 # Create engine
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})

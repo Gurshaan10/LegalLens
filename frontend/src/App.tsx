@@ -73,6 +73,13 @@ function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/about" element={<AboutPage />} />
 
+            {/* Public Analysis Page (guest-friendly) */}
+            <Route path="/analysis" element={
+              <Layout>
+                <AnalysisPage />
+              </Layout>
+            } />
+
             {/* Protected routes */}
             <Route
               path="/app/*"
