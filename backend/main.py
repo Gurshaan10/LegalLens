@@ -123,7 +123,7 @@ if not firebase_admin._apps:
 
 # Demo document configuration
 DEMO_DOCUMENT_ID = "demo-robinhood-document"
-DEMO_DOCUMENT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "robinhood.pdf")
+DEMO_DOCUMENT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "test-documents", "robinhood.pdf")
 
 # Document cleanup scheduler
 def cleanup_old_documents():
