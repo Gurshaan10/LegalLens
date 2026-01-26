@@ -12,6 +12,16 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
+// Debug: Log if environment variables are missing
+if (!firebaseConfig.appId) {
+  console.error('Firebase configuration missing! Environment variables:', {
+    hasApiKey: !!import.meta.env.VITE_FIREBASE_API_KEY,
+    hasAuthDomain: !!import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    hasProjectId: !!import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    hasAppId: !!import.meta.env.VITE_FIREBASE_APP_ID,
+  });
+}
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 export const analytics = getAnalytics(app);
