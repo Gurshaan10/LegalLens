@@ -121,8 +121,16 @@ async def load_demo_document():
 
 # Initialize Firebase Admin SDK (only once)
 if not firebase_admin._apps:
-    cred = credentials.Certificate(os.getenv("FIREBASE_ADMIN_CREDENTIAL") or "firebase-admin.json")
-    firebase_admin.initialize_app(cred)
+    try:
+        firebase_cred_path = os.getenv("FIREBASE_ADMIN_CREDENTIAL") or "firebase-admin.json"
+        if os.path.exists(firebase_cred_path):
+            cred = credentials.Certificate(firebase_cred_path)
+            firebase_admin.initialize_app(cred)
+            logger.info("Firebase Admin SDK initialized successfully")
+        else:
+            logger.warning(f"Firebase credential file not found at {firebase_cred_path}, authentication will not work")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Firebase: {e}. Authentication features will be disabled.")
 
 # Demo document configuration
 DEMO_DOCUMENT_ID = "demo-robinhood-document"
