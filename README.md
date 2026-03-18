@@ -8,10 +8,6 @@ A production-ready full-stack legal document analysis application powered by AI.
 
 ---
 
-## 👋 For Portfolio Reviewers & Hiring Managers
-
-Want to see Legal Lens in action without setting up accounts? Here's how:
-
 ### ⚡ Instant Demo (30 seconds)
 1. **Start the app** (see Quick Start below)
 2. **Visit** `http://localhost:5173`
@@ -32,7 +28,7 @@ Want to see Legal Lens in action without setting up accounts? Here's how:
 - Access your upload history and previous queries
 - Account menu with credit tracking and sign-out
 
-**Bottom line:** You can evaluate all core features in under 2 minutes without creating any accounts! 🚀
+**Bottom line:** You can evaluate all core features in under 5 minutes without creating any accounts! 🚀
 
 ---
 
